@@ -327,7 +327,9 @@ class SonnetteClient extends ChangeNotifier {
     final pc = _pc; _pc = null;
     final local = _local; _local = null;
     final remote = _remote; _remote = null;
-    localRenderer.srcObject = null; remoteRenderer.srcObject = null;
+    if (_initialized) {
+      localRenderer.srcObject = null; remoteRenderer.srcObject = null;
+    }
     if (pc != null) { await pc.close(); await pc.dispose(); }
     if (local != null) {
       for (final track in local.getTracks()) { await track.stop(); }
