@@ -1,0 +1,10 @@
+.git
+.local
+.env*
+**/build
+**/.dart_tool
+**/__pycache__
+**/.pytest_cache
+**/*.pem
+**/*.key
+**/*.sqlite3*

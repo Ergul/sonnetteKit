@@ -1,0 +1,13 @@
+# EXPERIMENTAL split override; needs Docker Compose >=2.24.4 for !override.
+# Both clients MUST use this same TURN instance with ICE_POLICY=relay.
+services:
+  signaling:
+    environment:
+      ICE_POLICY: relay
+  turn:
+    environment:
+      TURN_INTERNAL_ONLY: "1"
+      TURN_RELAY_IP: 172.30.44.10
+      TURN_EXTERNAL_IP: ""
+    ports: !override
+      - "127.0.0.1:5349:5349/tcp"

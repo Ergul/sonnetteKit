@@ -1,0 +1,52 @@
+# Standard split deployment. Nginx runs on the Docker host.
+services:
+  signaling:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    env_file: .local/compose.env
+    environment:
+      DEVICES_FILE: /config/devices.json
+      TURN_SECRET_FILE: /run/secrets/turn-secret
+      DATABASE_PATH: /data/calls.sqlite3
+    volumes:
+      - ./.local/devices.json:/config/devices.json:ro
+      - ./.local/turn-secret:/run/secrets/turn-secret:ro
+      - call-data:/data
+    ports:
+      - "127.0.0.1:8000:8000"
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+    networks: [sonnette]
+  turn:
+    build:
+      context: .
+      dockerfile: deploy/turn.Dockerfile
+    restart: unless-stopped
+    env_file: .local/compose.env
+    environment:
+      TURN_SECRET_FILE: /run/secrets/turn-secret
+    volumes:
+      - ./.local/turn-secret:/run/secrets/turn-secret:ro
+      - ./.local/certs:/certs:ro
+    ports:
+      - "127.0.0.1:5349:5349/tcp"
+      - "3478:3478/udp"
+      - "49160-49200:49160-49200/udp"
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+    networks:
+      sonnette:
+        ipv4_address: 172.30.44.10
+volumes:
+  call-data:
+networks:
+  sonnette:
+    ipam:
+      config:
+        - subnet: 172.30.44.0/24

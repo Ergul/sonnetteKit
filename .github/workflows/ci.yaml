@@ -1,0 +1,59 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r server/requirements-dev.txt
+      - run: python -m pytest -q
+        working-directory: server
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: python3 scripts/bootstrap_flutter.py --platforms web
+      - run: flutter analyze
+        working-directory: packages/sonnette_kit
+      - run: flutter test
+        working-directory: packages/sonnette_kit
+      - run: flutter analyze
+        working-directory: apps/flutter_client
+      - run: flutter build web
+        working-directory: apps/flutter_client
+  containers:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        mode: [split, all-in-one]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate isolated smoke-test credentials
+        run: |
+          python3 scripts/provision.py
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=turn.example.com' -keyout .local/certs/privkey.pem -out .local/certs/fullchain.pem
+          sudo chown -R 10001:10001 .local/certs .local/devices.json .local/turn-secret
+      - name: Build and start experimental 443 topology
+        env:
+          MODE: ${{ matrix.mode }}
+        run: |
+          if [ "$MODE" = split ]; then
+            docker compose -f compose.yaml -f compose.443.yaml up --build --wait --wait-timeout 180
+          else
+            docker compose -f compose.all-in-one.yaml -f compose.all-in-one.443.yaml up --build --wait --wait-timeout 180
+          fi
+          curl --fail http://127.0.0.1:8000/healthz
+      - name: Container logs
+        if: always()
+        run: |
+          docker compose -f compose.yaml -f compose.443.yaml logs || true
+          docker compose -f compose.all-in-one.yaml -f compose.all-in-one.443.yaml logs || true

@@ -1,0 +1,11 @@
+# EXPERIMENTAL all-in-one override; needs Docker Compose >=2.24.4.
+services:
+  server:
+    environment:
+      ICE_POLICY: relay
+      TURN_INTERNAL_ONLY: "1"
+      TURN_RELAY_IP: 172.30.44.10
+      TURN_EXTERNAL_IP: ""
+    ports: !override
+      - "127.0.0.1:8000:8000/tcp"
+      - "127.0.0.1:5349:5349/tcp"

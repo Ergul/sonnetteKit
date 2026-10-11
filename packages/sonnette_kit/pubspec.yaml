@@ -1,0 +1,15 @@
+name: sonnette_kit
+description: Self-hosted one-to-one WebRTC calling for Flutter.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.6.0 <4.0.0'
+  flutter: '>=3.27.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_webrtc: ^1.6.2+hotfix.4
+  web_socket_channel: ^3.0.3
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
