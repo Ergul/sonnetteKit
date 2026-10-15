@@ -8,7 +8,10 @@ Self-hosted, one-to-one audio/video calling with an **embeddable Flutter widget*
 
 - `SonnetteCallWidget`: a Material widget to embed in an existing Flutter application.
 - `SonnetteClient`: a reusable controller, also usable with your own UI.
-- Authenticated device identities and explicit outgoing-call allow lists.
+- Short-lived sessions issued by a protected internal API, with logical
+  identities and server-owned outgoing-call allow lists.
+- Multiple operator tabs can ring for the same logical operator; the first
+  acceptance wins and the other tabs are released.
 - Incoming calls, accept/decline, busy/offline responses, timeout, hang-up, microphone and camera controls.
 - Signaling reconnection after transport loss. **Interrupted calls end; they are not resumed automatically.**
 - Short-lived TURN credentials and a bounded SQLite log of call endings (no media or SDP storage).
@@ -48,11 +51,16 @@ import 'package:sonnette_kit/sonnette_kit.dart';
 
 final client = SonnetteClient();
 
-await client.connect(
-  server: Uri.parse('wss://call.example.com/ws'),
-  id: deviceId,
-  token: deviceAccessKey,
-);
+await client.connectWithCredentials(() async {
+  // Fetch these values from your authenticated application backend. That
+  // backend calls POST /internal/sessions; Flutter never receives its key.
+  final session = await fetchVideoSession();
+  return SonnetteCredentials(
+    server: Uri.parse(session.signalingUrl),
+    connectionId: session.connectionId,
+    accessToken: session.accessToken,
+  );
+});
 
 // In a Material app's widget tree:
 SizedBox(
@@ -85,7 +93,10 @@ python -m pytest -q
 cd ..
 ```
 
-The provisioning command creates `.local/devices.json`, `.local/device-keys.json`, a TURN secret and a deployment environment template. **All are ignored by Git.** Read the two generated device keys locally; do not paste them into issues or commits.
+The provisioning command creates a TURN secret, an internal API key and a
+deployment environment template. It also creates two static demo identities
+for the local test only. **All are ignored by Git.** Do not paste any generated
+key into issues or commits.
 
 Start the development server (from the repository root):
 
@@ -111,39 +122,89 @@ Open a second tab at the same URL. Connect the first as `door` and the second as
 
 See [installation](docs/installation.md) before starting: edit domain names, install certificates, set file ownership and configure the Nginx `stream` module.
 
+Create the Git-ignored `secrets/compose.env` file. The following values are an
+illustrative example and deliberately differ from the ports used by the test
+deployment:
+
+```dotenv
+CONTAINER_NAME=sonnette
+
+# Signaling backend exposed to Nginx.
+SIGNALING_BIND_ADDRESS=127.0.0.1
+SIGNALING_PORT=18080
+
+# TURN/TLS backend for the standard Compose profiles.
+TURN_TLS_BIND_ADDRESS=127.0.0.1
+TURN_TLS_PORT=15443
+
+# Optional public TURN/UDP listener.
+TURN_UDP_BIND_ADDRESS=0.0.0.0
+TURN_UDP_PORT=13478
+
+# UDP media relay range; forward the same range without port translation.
+TURN_RELAY_BIND_ADDRESS=0.0.0.0
+TURN_RELAY_MIN_PORT=55000
+TURN_RELAY_MAX_PORT=55040
+
+# Plain TURN/TCP backend when Nginx terminates TURN TLS.
+TURN_BIND_ADDRESS=127.0.0.1
+TURN_TCP_PORT=13479
+```
+
+Keep backend bindings on `127.0.0.1` when Nginx runs on the Docker host. When
+it runs elsewhere, use a private interface and firewall it. Update the Nginx
+upstreams and firewall/NAT rules to match the selected host ports. `TURN_URLS`
+must contain the public client-facing port; for example, keep port `443` there
+when Nginx accepts public TURN/TLS on `443` and proxies it to backend port
+`15443`.
+
 Split deployment:
 
 ```bash
-docker compose up --build -d
+docker compose --env-file secrets/compose.env up --build -d
 ```
 
 Single-container deployment (FastAPI + coturn; your existing Nginx stays outside):
 
 ```bash
-docker compose -f compose.all-in-one.yaml up --build -d
+docker compose --env-file secrets/compose.env \
+  -f compose.all-in-one.yaml up --build -d
 ```
 
 Experimental TCP-443-only split deployment:
 
 ```bash
-docker compose -f compose.yaml -f compose.443.yaml up --build -d
+docker compose --env-file secrets/compose.env \
+  -f compose.yaml -f compose.443.yaml up --build -d
 ```
 
 Experimental TCP-443-only single-container deployment:
 
 ```bash
-docker compose -f compose.all-in-one.yaml -f compose.all-in-one.443.yaml up --build -d
+docker compose --env-file secrets/compose.env \
+  -f compose.all-in-one.yaml -f compose.all-in-one.443.yaml up --build -d
 ```
+
+Published host ports and bind addresses are configured in the Git-ignored
+`secrets/compose.env`. Application secrets remain in `.local/compose.env`. The
+explicit `--env-file` is required because the Compose service-level `env_file:`
+does not interpolate the `ports:` section. `TURN_RELAY_MIN_PORT` and
+`TURN_RELAY_MAX_PORT` configure both coturn and Docker; forward that exact UDP
+range through the firewall/NAT without port translation.
 
 The overrides require Docker Compose **2.24.4+**. They replace the published port lists, removing the public UDP mappings. **Do not start the standard profile and assume that only TCP 443 is exposed.** Verify the resulting configuration with `docker compose ... config` before deployment.
 
 ## Important boundaries
 
-- One signaling process, one active connection per device, one call per device. No multi-worker or horizontally scaled signaling yet.
-- Ring timeout: 30 seconds; media setup timeout: 45 seconds; maximum active call: one hour.
+- One signaling process and one call per logical identity. Several sessions may
+  represent the same operator, but a terminal should open only one session. No
+  multi-worker or horizontally scaled signaling yet.
+- Ring timeout: 10–120 seconds, selected by the trusted backend; media setup
+  timeout: 45 seconds; maximum active call: one hour.
 - No background push notifications, screen sharing, recording, SIP gateway, group calls or automatic ICE restart yet.
 - Device keys are long-lived, randomly generated credentials; the server stores their SHA-256 hashes. TURN credentials expire after two hours and are refreshed before each accepted call.
-- Device provisioning and key rotation are operator actions. Restart signaling after changing device configuration; existing calls will be interrupted.
+- Production clients use short-lived connection tokens issued by the internal
+  API. Static device keys remain supported only for the standalone demo.
 - HTTPS/WSS protects signaling; WebRTC encrypts media between peers. This release has no independent peer-identity verification against a compromised signaling server.
 - TURN/TLS on TCP 443 is **not HTTPS**. A strict HTTP-only proxy may reject it.
 - Shared-port SNI routing and same-server internal TURN relaying are **experimental until validated on every supported runtime and the target network**.

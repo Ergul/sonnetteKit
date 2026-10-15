@@ -1,5 +1,6 @@
 .git
 .local
+secrets
 .env*
 **/build
 **/.dart_tool

@@ -1,6 +1,11 @@
 import unittest
 from sonnette.core import Hub, ProtocolError
-from sonnette.security import authenticate, ice_config
+from sonnette.security import (
+    authenticate,
+    authenticate_session,
+    ice_config,
+    issue_session,
+)
 import base64
 import hashlib
 import hmac
@@ -91,6 +96,43 @@ class Calls(unittest.TestCase):
         self.assertEqual(events[0][1]['reason'], 'rejected')
         self.assertFalse(self.hub.calls)
 
+    def test_all_operator_sessions_ring_and_first_acceptance_wins(self):
+        hub = Hub({'door': ['operator'], 'operator': []}, clock=lambda: self.now)
+        hub.connect('door-session', principal='door')
+        hub.connect('operator-tab-1', principal='operator')
+        hub.connect('operator-tab-2', principal='operator')
+
+        result, events = hub.handle(
+            'door-session', {'type': 'call.invite', 'to': 'operator'})
+        cid = result['call_id']
+        self.assertEqual(
+            {target for target, event in events
+             if event['type'] == 'call.incoming'},
+            {'operator-tab-1', 'operator-tab-2'},
+        )
+
+        _, accepted = hub.handle(
+            'operator-tab-2', {'type': 'call.accept', 'call_id': cid})
+        self.assertIn(
+            ('operator-tab-1', {'type': 'call.ended', 'call_id': cid,
+                                'reason': 'taken'}),
+            accepted,
+        )
+        self.assertEqual(hub.calls[cid].accepted_by, 'operator-tab-2')
+        with self.assertRaisesRegex(ProtocolError, 'unknown_call'):
+            hub.handle('operator-tab-1', {'type': 'call.accept',
+                                          'call_id': cid})
+
+    def test_closing_one_ringing_operator_tab_keeps_the_call(self):
+        hub = Hub({'door': ['operator'], 'operator': []}, clock=lambda: self.now)
+        hub.connect('door-session', principal='door')
+        hub.connect('operator-tab-1', principal='operator')
+        hub.connect('operator-tab-2', principal='operator')
+        result, _ = hub.handle(
+            'door-session', {'type': 'call.invite', 'to': 'operator'})
+        self.assertEqual(hub.disconnect('operator-tab-1'), [])
+        self.assertIn(result['call_id'], hub.calls)
+
 
 class Security(unittest.TestCase):
     def test_auth(self):
@@ -109,6 +151,40 @@ class Security(unittest.TestCase):
         self.assertEqual(server['credential'], expected)
         with self.assertRaises(ValueError):
             ice_config('a', [], '', 'relay')
+
+    def test_short_lived_dynamic_session(self):
+        sessions = {}
+        connection_id, token, record = issue_session(
+            sessions,
+            principal_id='operator.demo',
+            role='operator',
+            allow=[],
+            ttl_seconds=120,
+            now=1000,
+        )
+        self.assertEqual(
+            authenticate_session(sessions, connection_id, token, now=1050),
+            record,
+        )
+        self.assertIsNone(
+            authenticate_session(sessions, connection_id, 'wrong', now=1050))
+        self.assertIsNone(
+            authenticate_session(sessions, connection_id, token, now=1120))
+
+    def test_issuing_session_prunes_expired_records(self):
+        sessions = {
+            'expired': {
+                'expires_at': 999,
+            },
+        }
+        issue_session(
+            sessions,
+            principal_id='operator.demo',
+            role='operator',
+            allow=[],
+            now=1000,
+        )
+        self.assertNotIn('expired', sessions)
 
 
 if __name__ == '__main__':

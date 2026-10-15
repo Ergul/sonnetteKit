@@ -6,20 +6,37 @@
 
 The controller provides:
 
-- `connect(server: ..., id: ..., token: ...)`
+- `connectWithCredentials(provider)` for production short-lived sessions
+- `connect(server: ..., id: ..., token: ...)` for the standalone static demo
 - `invite(target)`, `accept()`, `reject()`, `hangUp()`
 - `setMicrophone(enabled)`, `setCamera(enabled)`
 - `disconnect()`, `shutdown()`, then synchronous `dispose()`
-- `online`, `phase`, `callId`, `peer`, `peers`, `error`, `mediaStatus`
+- `online`, `phase`, `callId`, `peer`, `peerLabel`, `peerLocation`, `peers`,
+  `error`, `mediaStatus`, `lastEndedCallId`, `lastEndReason`
 - `localRenderer`, `remoteRenderer` for custom UIs
 
-The widget accepts `client`, optional `targetDeviceId`, `title` and `onError`. It needs Material ancestors and bounded height, e.g. `Expanded` or `SizedBox(height: 620)`. It follows the host theme. Labels are initially English; localization is not implemented yet.
+The widget accepts `client`, optional `targetDeviceId`, `title`, `labels` and
+`onError`. It needs Material ancestors and bounded height, e.g. `Expanded` or
+`SizedBox(height: 620)`. It follows the host theme. English and French label
+sets are included; the host can provide another `SonnetteCallLabels` value.
 
 Connect on a user action or in an async application/session initialization flow, never in `build()`. Hold the controller in your app's existing state-management layer. You can embed the widget on a page, in a dialog, or in a side panel; in a dialog, choose a bounded width/height. To customize the incoming-call notification globally, observe `phase == CallPhase.incoming` from your app and show your own UI.
 
 ## Credentials
 
-Pass device-specific keys from your host application's provisioning flow. The package keeps the key only in memory. The demo's form is for testing, not a production login experience. Do not compile live keys into a Flutter Web bundle, commit them, place them in URLs, or use the same key for all devices. Host applications need an appropriate secure provisioning/storage strategy.
+In production, pass a `SonnetteCredentialsProvider` which obtains a fresh
+short-lived connection ID and access token from the authenticated host API.
+The provider is called before every reconnect. The host API alone holds the
+Sonnette internal key and decides the logical identity, destination allow list
+and ring timeout. The package keeps connection credentials only in memory.
+
+The demo's static key form is only for local testing. Do not compile live keys
+or the internal API key into Flutter, commit them, or place them in URLs.
+
+Hosts with two physical cameras can provide `beforeMediaStart`,
+`afterMediaStop` and `mediaConstraintsProvider` callbacks. EntryMonitor uses
+these hooks to release its IR presence camera, select the color camera for the
+call, then restore IR detection after media stops.
 
 ## Platforms
 
@@ -48,6 +65,8 @@ Run each native build on a supported host. The generator does not replace existi
 - ICE candidates received before the remote SDP are buffered.
 - Only the caller creates an offer; this release does not renegotiate or perform ICE restarts.
 - Signaling disconnect ends the call and reconnects with backoff; the user must redial.
-- A second connection with the same identity is rejected; it does not replace the first.
+- A second connection with the same connection ID is rejected. Separate
+  short-lived sessions may share a logical operator identity; all ring and the
+  first accepted session wins.
 - The widget must not dispose a controller owned by another part of the app.
 - Before the owner disposes a client, call `await client.shutdown()`; in synchronous Flutter `State.dispose`, schedule shutdown and call `client.dispose` when it completes, as shown in the demo.

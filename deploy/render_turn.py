@@ -5,17 +5,34 @@ from pathlib import Path
 import re
 
 
+def _port(name, default):
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError as exc:
+        raise ValueError(f'{name} must be an integer') from exc
+    if not 1 <= value <= 65535:
+        raise ValueError(f'{name} must be between 1 and 65535')
+    return value
+
+
 def render():
     secret = Path(os.getenv('TURN_SECRET_FILE', '/run/secrets/turn-secret')).read_text().strip()
     realm = os.environ['TURN_REALM']
     if not re.fullmatch(r'[a-zA-Z0-9.-]+', realm) or not re.fullmatch(r'[a-zA-Z0-9_-]{32,}', secret):
         raise ValueError('Invalid TURN realm or secret')
+    relay_min_port = _port('TURN_RELAY_MIN_PORT', 49160)
+    relay_max_port = _port('TURN_RELAY_MAX_PORT', 49200)
+    if relay_min_port > relay_max_port:
+        raise ValueError('TURN_RELAY_MIN_PORT must not exceed TURN_RELAY_MAX_PORT')
     lines = [
         'listening-port=3478', 'tls-listening-port=5349', 'listening-ip=0.0.0.0',
         f'realm={realm}', 'use-auth-secret', f'static-auth-secret={secret}',
         'fingerprint', 'no-cli', 'no-multicast-peers', 'no-tcp-relay',
+        # Long-term users are not stored in SQLite, but coturn still opens its
+        # default database. Keep that disposable file on the writable tmpfs.
+        'userdb=/tmp/turndb',
         'no-tlsv1', 'no-tlsv1_1', 'no-dtls',
-        'min-port=49160', 'max-port=49200',
+        f'min-port={relay_min_port}', f'max-port={relay_max_port}',
         'user-quota=4', 'total-quota=100', 'max-bps=1000000',
         'cert=/certs/fullchain.pem', 'pkey=/certs/privkey.pem',
         'log-file=stdout', 'simple-log', 'pidfile=/tmp/coturn.pid',

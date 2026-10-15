@@ -1,4 +1,5 @@
 .local/
+secrets/
 .env
 .env.*
 !.env.example
@@ -11,6 +12,9 @@ __pycache__/
 .dart_tool/
 .flutter-plugins*
 build/
+# This repository exposes a reusable Flutter package; applications own the
+# resolved dependency graph.
+packages/sonnette_kit/pubspec.lock
 **/android/local.properties
 **/android/key.properties
 **/ios/Pods/

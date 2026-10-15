@@ -2,7 +2,12 @@
 
 ## Completed locally
 
-- Python 3.12: 17 server/security/WebSocket tests passed.
+- Python 3.13: 24 server/security/WebSocket tests passed locally, including
+  dynamic sessions, multiple operator tabs and authoritative call audit.
+- Flutter 3.29 / Dart 3.7: package dependency resolution, static analysis and
+  all 3 widget tests passed locally.
+- The consuming EntryMonitor Android debug APK and Profil UI Web debug bundle
+  both compiled with `sonnette_kit` 0.2.0 and `flutter_webrtc` 1.6.2+hotfix.4.
 - All Python source files parse; Compose and Flutter manifest YAML files parse.
 - Tests cover authentication, invalid credentials and origins, duplicate device connections, invitation replay, call lifecycle, access controls, crossed invitations, timeouts, disconnect cleanup, malformed messages and temporary TURN credentials.
 
@@ -20,7 +25,8 @@
 
 A subsequent lifecycle guard allows shutdown before renderer initialization and adds a regression test. Check the latest commit's [CI status](https://github.com/Ergul/sonnetteKit/actions) for that change.
 
-Local Flutter SDK initialization was blocked by the authoring environment's automatic review after an attempted cloud-metadata request. No local Flutter build is claimed; the successful Flutter checks above ran on GitHub-hosted runners. Docker was also unavailable locally.
+The current dynamic-session changes were validated locally as described above.
+Docker and physical-device media were not exercised by that validation run.
 
 ## Not yet validated
 

@@ -7,15 +7,13 @@ services:
     restart: unless-stopped
     env_file: .local/compose.env
     environment:
-      DEVICES_FILE: /config/devices.json
       TURN_SECRET_FILE: /run/secrets/turn-secret
       DATABASE_PATH: /data/calls.sqlite3
     volumes:
-      - ./.local/devices.json:/config/devices.json:ro
       - ./.local/turn-secret:/run/secrets/turn-secret:ro
       - call-data:/data
     ports:
-      - "127.0.0.1:8000:8000"
+      - "${SIGNALING_BIND_ADDRESS:-127.0.0.1}:${SIGNALING_PORT:-8000}:8000/tcp"
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
     read_only: true
@@ -29,13 +27,15 @@ services:
     env_file: .local/compose.env
     environment:
       TURN_SECRET_FILE: /run/secrets/turn-secret
+      TURN_RELAY_MIN_PORT: "${TURN_RELAY_MIN_PORT:-49160}"
+      TURN_RELAY_MAX_PORT: "${TURN_RELAY_MAX_PORT:-49200}"
     volumes:
       - ./.local/turn-secret:/run/secrets/turn-secret:ro
       - ./.local/certs:/certs:ro
     ports:
-      - "127.0.0.1:5349:5349/tcp"
-      - "3478:3478/udp"
-      - "49160-49200:49160-49200/udp"
+      - "${TURN_TLS_BIND_ADDRESS:-127.0.0.1}:${TURN_TLS_PORT:-5349}:5349/tcp"
+      - "${TURN_UDP_BIND_ADDRESS:-0.0.0.0}:${TURN_UDP_PORT:-3478}:3478/udp"
+      - "${TURN_RELAY_BIND_ADDRESS:-0.0.0.0}:${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49200}:${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49200}/udp"
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
     read_only: true

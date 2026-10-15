@@ -47,13 +47,13 @@ jobs:
           MODE: ${{ matrix.mode }}
         run: |
           if [ "$MODE" = split ]; then
-            docker compose -f compose.yaml -f compose.443.yaml up --build --wait --wait-timeout 180
+            docker compose --env-file .local/compose.env -f compose.yaml -f compose.443.yaml up --build --wait --wait-timeout 180
           else
-            docker compose -f compose.all-in-one.yaml -f compose.all-in-one.443.yaml up --build --wait --wait-timeout 180
+            docker compose --env-file .local/compose.env -f compose.all-in-one.yaml -f compose.all-in-one.443.yaml up --build --wait --wait-timeout 180
           fi
           curl --fail http://127.0.0.1:8000/healthz
       - name: Container logs
         if: always()
         run: |
-          docker compose -f compose.yaml -f compose.443.yaml logs || true
-          docker compose -f compose.all-in-one.yaml -f compose.all-in-one.443.yaml logs || true
+          docker compose --env-file .local/compose.env -f compose.yaml -f compose.443.yaml logs || true
+          docker compose --env-file .local/compose.env -f compose.all-in-one.yaml -f compose.all-in-one.443.yaml logs || true
